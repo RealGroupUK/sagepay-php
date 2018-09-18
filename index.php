@@ -119,7 +119,7 @@ $merchantkey = $sagepay->getMerchantKey();
                                 <div class="col-xs-12">
                                     <div class="form-group">
                                         <label for="invoiceValue">Invoice value (£)</label>
-                                        <input type="text" class="form-control" name="invoiceValue" required />
+                                        <input type="number" class="form-control" name="invoiceValue" required placeholder="eg. 1234.56" step="0.01" />
                                         Price <em>including</em> VAT
                                     </div>
                                 </div>                        
@@ -127,7 +127,7 @@ $merchantkey = $sagepay->getMerchantKey();
                     </div>
                     <div class="panel-heading" >
                         <div class="row display-tr" >
-                            <h3 class="panel-title display-td" >Payee Details</h3>
+                            <h3 class="panel-title display-td" >Cardholder Details</h3>
                             <div class="display-td" >                            
                                 <!--<img class="img-responsive pull-right" src="http://i76.imgup.net/accepted_c22e0.png">-->
                             </div>
