@@ -34,7 +34,11 @@ if ( $cardidentifier ) {
     $payment_options->billingAddress->address1 = filter_input( INPUT_POST, 'payeeAdd1' );
     $payment_options->billingAddress->address2 = filter_input( INPUT_POST, 'payeeAdd2' );
     $payment_options->billingAddress->city = filter_input( INPUT_POST, 'payeeCity' );
-    $payment_options->billingAddress->postalCode = filter_input( INPUT_POST, 'payeePostcode' );
+    $postcode = filter_input( INPUT_POST, 'payeePostcode' );
+    if ( '' == $postcode ) {
+        $postcode = "12345";
+    }
+    $payment_options->billingAddress->postalCode = $postcode;
     $payment_options->billingAddress->country = filter_input( INPUT_POST, 'payeeCountry' );
     $payment_options->entryMethod = 'Ecommerce';
     
