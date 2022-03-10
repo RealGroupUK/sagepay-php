@@ -1,9 +1,117 @@
 <?php
+
+    // 3DS v2 form documentation here:
+    // https://developer-eu.elavon.com/docs/opayo/3d-secure-authentication
+    
+    // Test card details
+    // https://www.opayo.co.uk/support/15/36/test-card-details-for-your-test-transactions#:~:text=Card%20Details%20%20%20Card%20%20%20Card,%20%20E%20%2016%20more%20rows%20
+
+    // Handy post for 3DS browser data
+    // https://www.mikesimagination.net/journal/jul-19/strong-customer-authentication-sagepay-direct-v400
+
 if (!file_exists('settings.php')) {
     die ('Payment gateway is not configured.');
 }
 require_once 'settings.php';
 require_once 'sagepayconnector.class.php';
+
+session_start();
+
+define('ACTION_START', 0);
+define('ACTION_CHALLENGE', 1);
+define('ACTION_FALLBACK',2);
+define('ACTION_SUCCESS', 254);
+define('ACTION_FAILED', 255);
+
+/**
+ * Write the 3DS session data to a text file for processing in an iFrame
+ * @param string $url
+ * @param string $creq
+ * @param string $session
+ */
+function writeTransactionFile($action, $url, $creq, $session)
+{
+    $fh = fopen('paymentkey.' . $session . '.dat', 'w');
+    if ($fh) {
+        $data = new stdClass();
+        $data->action = $action;
+        $data->url = $url;
+        $data->creq = $creq;
+        $data->session = $session;
+        
+        fwrite($fh, json_encode($data));
+//        fwrite($fh, $action . PHP_EOL);
+//        fwrite($fh, $url . PHP_EOL);
+//        fwrite($fh, $creq . PHP_EOL);
+//        fwrite($fh, $session . PHP_EOL);
+        fclose($fh);
+    } else {
+        die ('ERROR: Unable to write to key store. Please contact Real Training for support.');
+    }
+}
+
+/**
+ * Report that the transaction has successfully completed to the screen.
+ * This immediately ends the script.
+ */
+function successfulTransaction()
+{
+    echo 'Your payment has been successfully authorised. Thank you.';
+    echo '</div></body></html>';
+    exit;
+}
+
+/**
+ * Report that the transaction has failed to the screen and report the error.
+ * This immediately ends the script.
+ * @global stdClass $errors
+ * @global stdClass $txfail
+ */
+function failedTransaction()
+{
+    global $errors;
+    global $txfail;
+    
+    echo '<div class="error danger">';
+    echo '<h3>There was a problem with your payment</h3>';
+    foreach ($errors as $error) {
+        echo "<p>$error->description</p>";
+    }
+    if (isset($txfail)) {
+        echo "<p>$txfail->description</p>";
+    }
+    echo '</div></body></html>';
+    exit;
+}
+/**
+ * Handle the 3D Secure fallback request
+ * @global SagePayConnector $sagepay
+ * @global int $action Status of the action to trigger
+ */
+function manage3DSResponse()
+{
+    global $sagepay, $action;
+    if (isset($_POST['MD'])) {
+        $session = trim($_POST['MD']);
+        $finalresponse = $sagepay->get3DAuth($session, $_POST['PaRes']);
+        if ( 'Authenticated' === $finalresponse->status ) {
+            $action = ACTION_SUCCESS;
+        } else {
+            $action = ACTION_FAILED;
+        }
+    } elseif (isset($_POST['cres'])) {
+        // Full 3D secure response
+        $response = $_POST['cres'];
+        $txID = (base64_decode($_POST['threeDSSessionData']));
+        $finalresponse = $sagepay->get3DAuthCallback( $txID, $response);
+        
+         if ( '0000' === $finalresponse->statusCode ) {
+            $action = ACTION_SUCCESS;
+        } else {
+            $action = ACTION_FAILED;
+        }
+    }
+}
 
 $sagepay = new SagePayConnector( $vendorname, $sessionkey );
 $sagepay->setMode( $mode );
@@ -11,12 +119,44 @@ $sagepay->setMode( $mode );
 $cardresponse = new stdClass();
 $errors = array();
 $success = null;
+$action = ACTION_START;
 
-$cardidentifier = filter_input( INPUT_POST, 'card-identifier' );
+if (isset($_POST['PaRes']) && isset($_POST['MD'])) {
+    manage3DSResponse();
+} elseif (isset($_POST['cres']) && isset($_POST['threeDSSessionData'])) {
+    manage3DSResponse();
+} else {
+    $cardidentifier = filter_input( INPUT_POST, 'card-identifier' );    
+}
 
-if ( $cardidentifier ) {
+if ( isset($cardidentifier) ) {
+    
+    // Build 3D Secure Object
+    $scaObj = new stdClass();
+    if (isset($_POST['BrowserJavascriptEnabled'])) {
+        $scaObj->browserJavascriptEnabled = filter_var(1,FILTER_VALIDATE_BOOLEAN);
+        $scaObj->browserJavaEnabled = filter_var($_POST['BrowserJavaEnabled'],FILTER_VALIDATE_BOOLEAN);
+        $scaObj->browserColorDepth = $_POST['BrowserColorDepth'];
+        $scaObj->browserScreenHeight = $_POST['BrowserScreenHeight'];
+        $scaObj->browserScreenWidth = $_POST['BrowserScreenWidth'];
+        $scaObj->browserTZ = $_POST['BrowserTZ'];
+        $scaObj->browserLanguage = $_POST['BrowserLanguage'];
+} else {
+        $scaObj->browserJavascriptEnabled = 0;
+        $scaObj->browserLanguage = 'en-GB';
+}
+
+$scaObj->browserAcceptHeader = !empty($_SERVER['HTTP_ACCEPT']) ? $_SERVER['HTTP_ACCEPT'] : 'text/html, application/xhtml+xml, application/xml;q=0.9, */*;q=0.8';
+$scaObj->browserUserAgent = $_SERVER['HTTP_USER_AGENT'];
+$scaObj->notificationURL = $termurl;
+$scaObj->browserIP = $_SERVER['REMOTE_ADDR'];
+$scaObj->transType = 'GoodsAndServicePurchase';
+$scaObj->challengeWindowSize = 'ExtraLarge';
+// End 3DS object
     
     $payment_options = new stdClass();
+//    $payment_options->apply3DSecure = 'Force';
+//    $payment_optinos->applyAvsCvcCheck = 'Force';
     $payment_options->transactionType = 'Payment';
     $payment_options->paymentMethod = new stdClass();
     $payment_options->paymentMethod->card = new stdClass();
@@ -24,7 +164,7 @@ if ( $cardidentifier ) {
     $payment_options->paymentMethod->card->merchantSessionKey = filter_input ( INPUT_POST, 'sessionKey' );
     $payment_options->paymentMethod->card->cardIdentifier = $cardidentifier;
 //    $payment_options->paymentMethod->card->save = false;
-    $payment_options->vendorTxCode = filter_input( INPUT_POST, 'invoiceNumber' );
+    $payment_options->vendorTxCode = filter_input( INPUT_POST, 'invoiceNumber' ) . '-' . date('Y-m-d-H-i');
     $payment_options->amount = filter_input( INPUT_POST, 'invoiceValue' ) * 100;
     $payment_options->description = 'Real Training course booking';
     $payment_options->currency = 'GBP';
@@ -33,6 +173,7 @@ if ( $cardidentifier ) {
     $payment_options->billingAddress = new stdClass();
     $payment_options->billingAddress->address1 = filter_input( INPUT_POST, 'payeeAdd1' );
     $payment_options->billingAddress->address2 = filter_input( INPUT_POST, 'payeeAdd2' );
+    $payment_options->billingAddress->address3 = filter_input( INPUT_POST, 'payeeAdd3' );
     $payment_options->billingAddress->city = filter_input( INPUT_POST, 'payeeCity' );
     $postcode = filter_input( INPUT_POST, 'payeePostcode' );
     if ( '' == $postcode ) {
@@ -41,22 +182,44 @@ if ( $cardidentifier ) {
     $payment_options->billingAddress->postalCode = $postcode;
     $payment_options->billingAddress->country = filter_input( INPUT_POST, 'payeeCountry' );
     $payment_options->entryMethod = 'Ecommerce';
+    $payment_options->strongCustomerAuthentication = $scaObj;
     
     $cardresponse = $sagepay->sendTransaction( json_encode( $payment_options ) );
     
-    if ( property_exists( $cardresponse, 'errors' ) ) {
-        $errors = $cardresponse->errors;
-    } elseif ( "0000" !== $cardresponse->statusCode) {
-        // We're still not successful. There's something wrong with the transaction
-        $txfail = new stdClass();
-        $txfail->description = $cardresponse->statusDetail;
-        $txfail->code = $cardresponse->statusCode;
-        $errors[] = $txfail;
+    if ($cardresponse->http_response > 199 && $cardresponse->http_response < 300) {
+        if ( property_exists($cardresponse, 'statusCode') && "2021" === $cardresponse->statusCode ) {
+            // Challenge authentication
+            $action = ACTION_CHALLENGE;
+        } elseif ( property_exists($cardresponse, 'statusCode') && "2007" === $cardresponse->statusCode ) {
+            // Fallback outcome
+            $action = ACTION_FALLBACK;
+
+        } elseif ( property_exists($cardresponse, 'statusCode') && "0000" !== $cardresponse->statusCode) {
+            // We're still not successful. There's something wrong with the transaction
+            $txfail = new stdClass();
+            $txfail->description = $cardresponse->statusDetail;
+            $txfail->code = $cardresponse->statusCode;
+            $errors[] = $txfail;
+            $action = ACTION_FAILED;
+        } else {
+            // We've been successful
+            // We should probably record that TX data for backup purposes somewhere.
+            // Also, show that it's been successful and remove the form.
+            $success = true;
+            $action = ACTION_SUCCESS;
+        }
     } else {
-        // We've been successful
-        // We should probably record that TX data for backup purposes somewhere.
-        // Also, show that it's been successful and remove the form.
-        $success = true;
+        if ( property_exists( $cardresponse, 'errors')) {
+            $errors = $cardresponse->errors;
+        }
+        $error = new stdClass();
+        if (isset($cardresponse->statusCode)) {
+            $error->description = "$cardresponse->statusCode: $cardresponse->statusDetail";
+        }
+        elseif (isset($cardresponse->description)) {
+            $error->description = "$cardresponse->code: $cardresponse->description";
+        }
+        $errors[] = $error;
     }
 }
 
@@ -77,25 +240,36 @@ $merchantkey = $sagepay->getMerchantKey();
     <body>
 
 <div class="container">
-    
+    <?php
+    if (ACTION_FALLBACK !== $action) {
+    ?>
     <h1><img alt="Real Training" src="data:image/png;base64,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"> payment gateway</h1>
-    <?php if ( true === $success ) {
-        echo 'Your payment has been successfully authorised. Thank you.';
+    <?php } ?>
+    
+    <?php if ( ACTION_SUCCESS === $action ) {
+        successfulTransaction();
+    }
+    
+    if ( ACTION_FALLBACK === $action) {
+        $_SESSION['cxID'] = $cardresponse->transactionId;
+        writeTransactionFile($action, $cardresponse->acsUrl, $cardresponse->paReq, $cardresponse->transactionId);
+        echo "<iframe src=\"3dsform.php\" name=\"3Diframe\" width=600 height=400></iframe>";
         echo '</div></body>';
         exit;
     }
+    if ( ACTION_CHALLENGE === $action ) {
+        $_SESSION['cxID'] = $cardresponse->transactionId;
+        writeTransactionFile($action, $cardresponse->acsUrl, trim($cardresponse->cReq), $cardresponse->transactionId);
+        echo "<iframe src=\"3dsform.php\" name=\"3Diframe\" width=600 height=400></iframe>";
+        echo '</div></body>';
+        exit;
+    }
+    if ( count( $errors ) || ACTION_FAILED === $action ) {
+        failedTransaction();
+    }
+
     ?>
     <p class="page-description">Please use this page to pay for your invoice by card. We require the invoice number and the total value you are paying (including VAT).</p>
-    <?php
-    if ( count( $errors ) ) {
-        echo '<div class="error danger">';
-        echo '<h3>There was a problem with your payment</h3>';
-        foreach ($errors as $error) {
-            echo "<p>$error->description</p>";
-        }
-        echo '</div>';
-    }
-    ?>
         <div class="row payment-form">
             <div class="col-xs-12 col-md-6">
                 <form role="form" id="payment-form" method="POST">
@@ -158,7 +332,7 @@ $merchantkey = $sagepay->getMerchantKey();
                                 <div class="col-xs-12">
                                     <div class="form-group">
                                         <label for="payeeAdd1">Address 1</label>
-                                        <input type="text" class="form-control" name="payeeAdd1" value=""  required>
+                                        <input type="text" class="form-control" name="payeeAdd1" value="" maxlength="50" required>
                                     </div>
                                 </div>                        
                             </div>
@@ -166,7 +340,15 @@ $merchantkey = $sagepay->getMerchantKey();
                                 <div class="col-xs-12">
                                     <div class="form-group">
                                         <label for="payeeAdd2">Address 2</label>
-                                        <input type="text" class="form-control" name="payeeAdd2" value="" >
+                                        <input type="text" class="form-control" name="payeeAdd2" value="" maxlength="50">
+                                    </div>
+                                </div>                        
+                            </div>
+                            <div class="row">
+                                <div class="col-xs-12">
+                                    <div class="form-group">
+                                        <label for="payeeAdd3">Address 3</label>
+                                        <input type="text" class="form-control" name="payeeAdd3" value="" maxlength="50">
                                     </div>
                                 </div>                        
                             </div>
@@ -464,6 +646,7 @@ $merchantkey = $sagepay->getMerchantKey();
 
         </div>
     </div>
+
     <script src="js/bootstrap.min.js"></script> 
     <script>
        (function() {
@@ -471,6 +654,64 @@ $merchantkey = $sagepay->getMerchantKey();
             // We have to check that SagePay has loaded correctly to render the payment form. Otherwise we'll remove the whole form.
             if (typeof sagepayCheckout === "function") { 
                 sagepayCheckout ({ merchantSessionKey: '<?php echo $merchantkey->merchantSessionKey;?>'}).form('#payment-form');
+                
+                var paymentform = document.getElementById('payment_form');
+
+                        //has javascript
+                        var a = document.createElement("INPUT");
+                        a.setAttribute("type", "hidden");
+                        a.setAttribute("value", "1");
+                        a.setAttribute("name", "BrowserJavascriptEnabled");
+                        paymentform.appendChild(a);
+
+                //java?
+                        var b = document.createElement("INPUT");
+                        b.setAttribute("type", "hidden");
+                        b.setAttribute("name", "BrowserJavaEnabled");
+                        if(navigator.javaEnabled()){
+                                b.setAttribute("value","1" );
+                        }
+                        else{
+                                b.setAttribute("value", "0");
+                        }
+                        paymentform.appendChild(b);
+
+                //BrowserColorDepth
+                        var c = document.createElement("INPUT");
+                        c.setAttribute("type", "hidden");
+                        c.setAttribute("value", window.screen.colorDepth);
+                        c.setAttribute("name", "BrowserColorDepth");
+                        paymentform.appendChild(c);
+
+                //BrowserScreenHeight
+                        var d = document.createElement("INPUT");
+                        d.setAttribute("type", "hidden");
+                        d.setAttribute("value", window.screen.height);
+                        d.setAttribute("name", "BrowserScreenHeight");
+                        paymentform.appendChild(d);
+
+                //BrowserScreenWidth
+                        var e = document.createElement("INPUT");
+                        e.setAttribute("type", "hidden");
+                        e.setAttribute("value", window.screen.width);
+                        e.setAttribute("name", "BrowserScreenWidth");
+                        paymentform.appendChild(e);
+
+                //BrowserTZ
+                        var tzoffset = new Date().getTimezoneOffset();
+                        var f = document.createElement("INPUT");
+                        f.setAttribute("type", "hidden");
+                        f.setAttribute("value", tzoffset);
+                        f.setAttribute("name", "BrowserTZ");
+                        paymentform.appendChild(f);
+
+                //BrowserLanguage
+                var g = document.createElement("INPUT");
+                        g.setAttribute("type", "hidden");
+                        g.setAttribute("value", window.navigator.language);
+                        g.setAttribute("name", "BrowserLanguage");
+                        paymentform.appendChild(g);
+
             } else {
                 // SagePay hasn't loaded
                 // We need to display an error on the form so that it's clear it cannot be completed.
@@ -479,7 +720,7 @@ $merchantkey = $sagepay->getMerchantKey();
                 var paymentForm = document.getElementsByClassName('payment-form');
                 paymentForm[0].parentNode.removeChild(paymentForm[0]);
             }
-
+            
         })();
     </script>
     </body>

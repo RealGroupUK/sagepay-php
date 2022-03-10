@@ -8,6 +8,8 @@ class SagePayConnector {
     private $apiurltest = 'https://pi-test.sagepay.com/api/v1/';
     private $jsurllive = 'https://pi-live.sagepay.com/api/v1/js/sagepay.js';
     private $jsurltest = 'https://pi-test.sagepay.com/api/v1/js/sagepay.js';
+    private $apisecurecallbacklive = 'https://pi-live.sagepay.com/api/v1/transactions/{transactionId}';
+    private $apisecurecallbacktest = 'https://pi-test.sagepay.com/api/v1/transactions/{transactionId}';
     
     public function __construct( $vendor = null, $sessionkey = null )
     {
@@ -49,6 +51,20 @@ class SagePayConnector {
         }
     }
     
+    /**
+     * Retrieve the Opayo 3D Secure callback
+     * https://developer-eu.elavon.com/docs/opayo/3d-secure-authentication#step-3
+     * @return string
+     */
+    public function get3DSUrl()
+    {
+        if ( 'live' === $this->mode ) {
+            return $this->apisecurecallbacklive;
+        } else {
+            return $this->apisecurecallbacktest;
+        }
+    }
+    
     public function getJSUrl()
     {
         if ( 'live' === $this->mode ) {
@@ -68,6 +84,41 @@ class SagePayConnector {
         return $this->sageRequest( $this->getAPIUrl() . 'transactions' , $txdetails );
     }
     
+    /**
+     * Get the 3D secure FALLBACK response from the provider
+     * @param string $transactionID The ID of the transaction being authorised
+     * @param string $paRes This is a Base64 encoded, encrypted message sent
+     * back by the issuing bank to your TermURL at the end of the 3D Secure
+     * authentication process
+     * @return string JSON {"status": "authenticated"} on success
+     */
+    public function get3DAuth( $transactionID, $paRes )
+    {
+        $transactionurl = preg_replace('{\{transactionId\}}', $transactionID, $this->get3DSUrl()) . '/3d-secure';
+        
+        return $this->sageRequest( $transactionurl, '{"paRes":"' . $paRes . '"}');
+    }
+    
+    /**
+     * Get the 3D secure CHALLENGE response from the provider
+     * @param string $transactionID The ID of the transaction being authorised
+     * @param string $cres Challenge result - this is the authentication result.
+     */
+    public function get3DAuthCallback( $transactionID, $cres )
+    {
+        $transactionurl = preg_replace('{\{transactionId\}}', $transactionID, $this->get3DSUrl()) . '/3d-secure-challenge';
+        $request = new stdClass();
+        $request->cRes = $cres;
+        
+        return $this->sageRequest( $transactionurl, '{"cRes":"' . $cres . '"}' );
+    }
+    
+    /**
+     * Send a request to SagePay using curl
+     * @param string $endpoint The URL endpoint for the request
+     * @param string $data JSON structured data
+     * @return string JSON response
+     */
     private function sageRequest( $endpoint, $data )
     {
         $curl = curl_init();
@@ -88,7 +139,9 @@ class SagePayConnector {
        $err = curl_error($curl);
 
        curl_close($curl);
+       $return = json_decode( $response );
+       $return->http_response = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 
-       return json_decode( $response );
+       return $return;
     }
 }
