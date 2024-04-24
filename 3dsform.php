@@ -5,6 +5,13 @@ define('ACTION_FALLBACK',2);
 define('ACTION_SUCCESS', 254);
 define('ACTION_FAILED', 255);
 
+// Prevents JavaScript XSS attacks aimed at stealing the session ID
+ini_set('session.cookie_httponly', 1);
+// Prevents passing the session ID through URLs
+ini_set('session.use_only_cookies', 1);
+// Uses a secure connection (HTTPS) if possible
+ini_set('session.cookie_secure', 1);
+
 session_start();
 $fh = fopen('paymentkey.' . $_SESSION['cxID'] . '.dat', 'r');
 

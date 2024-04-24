@@ -15,6 +15,13 @@ if (!file_exists('settings.php')) {
 require_once 'settings.php';
 require_once 'sagepayconnector.class.php';
 
+// Prevents JavaScript XSS attacks aimed at stealing the session ID
+ini_set('session.cookie_httponly', 1);
+// Prevents passing the session ID through URLs
+ini_set('session.use_only_cookies', 1);
+// Uses a secure connection (HTTPS) if possible
+ini_set('session.cookie_secure', 1);
+
 session_start();
 
 define('ACTION_START', 0);
@@ -180,6 +187,10 @@ $scaObj->challengeWindowSize = 'ExtraLarge';
         $postcode = "12345";
     }
     $payment_options->billingAddress->postalCode = $postcode;
+    $state = filter_input( INPUT_POST, 'payeeState' );
+    if ('' == $state) {
+        $payment_options->billingState = $state;
+    }
     $payment_options->billingAddress->country = filter_input( INPUT_POST, 'payeeCountry' );
     $payment_options->entryMethod = 'Ecommerce';
     $payment_options->strongCustomerAuthentication = $scaObj;
@@ -372,7 +383,7 @@ $merchantkey = $sagepay->getMerchantKey();
                                 <div class="col-xs-12">
                                     <div class="form-group">
                                         <label for="payeeCountry">Country</label>
-                                        <select id="countries" class="form-control" name="payeeCountry" required >
+                                        <select id="countries" class="form-control payeeCountry" name="payeeCountry" required >
                                             <option value="GB">United Kingdom</option>
                                             <option value="AF">Afghanistan</option>
                                             <option value="AX">Aland Islands</option>
@@ -622,6 +633,67 @@ $merchantkey = $sagepay->getMerchantKey();
                                     </div>
                                 </div>                        
                             </div>
+                            <div class="row state-row" style="display:none;">
+                                <div class="col-xs-12">
+                                    <div class="form-group">
+                                        <label for="payeeCity">State</label>
+                                        <select type="text" class="form-control payeeState" name="payeeState" >
+                                            <option value="">Please select a state</option>
+                                            <option value="AL">Alabama</option>
+                                            <option value="AK">Alaska</option>
+                                            <option value="AZ">Arizona</option>
+                                            <option value="AR">Arkansas</option>
+                                            <option value="CA">California</option>
+                                            <option value="CO">Colorado</option>
+                                            <option value="CT">Connecticut</option>
+                                            <option value="DE">Delaware</option>
+                                            <option value="FL">Florida</option>
+                                            <option value="GA">Georgia</option>
+                                            <option value="HI">Hawaii</option>
+                                            <option value="ID">Idaho</option>
+                                            <option value="IL">Illinois</option>
+                                            <option value="IN">Indiana</option>
+                                            <option value="IA">Iowa</option>
+                                            <option value="KS">Kansas</option>
+                                            <option value="KY">Kentucky</option>
+                                            <option value="LA">Louisiana</option>
+                                            <option value="ME">Maine</option>
+                                            <option value="MD">Maryland</option>
+                                            <option value="MA">Massachusetts</option>
+                                            <option value="MI">Michigan</option>
+                                            <option value="MN">Minnesota</option>
+                                            <option value="MS">Mississippi</option>
+                                            <option value="MO">Missouri</option>
+                                            <option value="MT">Montana</option>
+                                            <option value="NE">Nebraska</option>
+                                            <option value="NV">Nevada</option>
+                                            <option value="NH">New Hampshire</option>
+                                            <option value="NJ">New Jersey</option>
+                                            <option value="NM">New Mexico</option>
+                                            <option value="NY">New York</option>
+                                            <option value="NC">North Carolina</option>
+                                            <option value="ND">North Dakota</option>
+                                            <option value="OH">Ohio</option>
+                                            <option value="OK">Oklahoma</option>
+                                            <option value="OR">Oregon</option>
+                                            <option value="PA">Pennsylvania</option>
+                                            <option value="RI">Rhode Island</option>
+                                            <option value="SC">South Carolina</option>
+                                            <option value="SD">South Dakota</option>
+                                            <option value="TN">Tennessee</option>
+                                            <option value="TX">Texas</option>
+                                            <option value="UT">Utah</option>
+                                            <option value="VT">Vermont</option>
+                                            <option value="VA">Virginia</option>
+                                            <option value="WA">Washington</option>
+                                            <option value="WV">West Virginia</option>
+                                            <option value="WI">Wisconsin</option>
+                                            <option value="WY">Wyoming</option>
+                                        </select>
+                                    </div>
+                                </div>                        
+                            </div>
+
                     </div>
                     <div class="panel-heading" >
                         <div class="row display-tr" >
@@ -650,13 +722,26 @@ $merchantkey = $sagepay->getMerchantKey();
     <script src="js/bootstrap.min.js"></script> 
     <script>
        (function() {
+           // State checking
+           var state = document.getElementsByClassName('payeeState');
+           var stateRow = document.getElementsByClassName('state-row');
+           var countrySelect = document.getElementsByClassName('payeeCountry');
+           countrySelect[0].addEventListener("change", function(e) {
+               if ('US' === e.srcElement.value) {
+                   state[0].setAttribute('required', '');
+                   stateRow[0].removeAttribute('style');
+               } else {
+                   state[0].removeAttribute('required');
+                   state[0].value = '';
+                   stateRow[0].setAttribute('style', 'display: none;');
+               }
+           });
 
             // We have to check that SagePay has loaded correctly to render the payment form. Otherwise we'll remove the whole form.
             if (typeof sagepayCheckout === "function") { 
                 sagepayCheckout ({ merchantSessionKey: '<?php echo $merchantkey->merchantSessionKey;?>'}).form('#payment-form');
                 
-                var paymentform = document.getElementById('payment_form');
-
+                var paymentform = document.getElementById('payment-form');
                         //has javascript
                         var a = document.createElement("INPUT");
                         a.setAttribute("type", "hidden");
