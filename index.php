@@ -5,9 +5,37 @@
     
     // Test card details
     // https://www.opayo.co.uk/support/15/36/test-card-details-for-your-test-transactions#:~:text=Card%20Details%20%20%20Card%20%20%20Card,%20%20E%20%2016%20more%20rows%20
+    // https://www.elavon.co.uk/resource-center/help-with-your-solutions/opayo/getting-started/testing-your-account/test-your-opayo-integration.html#step3
 
     // Handy post for 3DS browser data
     // https://www.mikesimagination.net/journal/jul-19/strong-customer-authentication-sagepay-direct-v400
+
+/**
+## Pi drop-in script
+
+https://sandbox.opayo.eu.elavon.com/api/v1/js/sagepay.js
+https://live.opayo.eu.elavon.com/api/v1/js/sagepay.js
+
+
+## Pi session keys
+https://sandbox.opayo.eu.elavon.com/api/v1/merchant-session-keys
+https://live.opayo.eu.elavon.com/api/v1/merchant-session-keys
+
+
+## PI 3D Secure Transaction
+Submit the transaction request
+Submit your transaction registration POST to:
+https://sandbox.opayo.eu.elavon.com/api/v1/transactions
+For live transactions, submit your transaction registration POST to:
+https://live.opayo.eu.elavon.com/api/v1/transactions
+
+
+## PI Opayo 3D Secure callback API
+For test transactions, submit your 3D Secure authentication result to:
+https://sandbox.opayo.eu.elavon.com/api/v1/transactions/{transactionId}/3d-secure-challenge
+For live transactions, submit your 3D Secure authentication result to:
+https://live.opayo.eu.elavon.com/api/v1/transactions/{transactionId}/3d-secure-challenge
+ */
 
 if (!file_exists('settings.php')) {
     die ('Payment gateway is not configured.');

@@ -1,14 +1,15 @@
-SagePay
-=======
+Opayo
+=====
 
-PHP class for interacting with SagePay Direct.
+PHP class for interacting with Opayo - formerly SagePay.
 
 Usage example:
 
 ```php
 <?php
 
-$sagepay = new SagePay('vendorid', 'live');
+$sagepay = new SagePayConnector( $vendorname, $sessionkey );
+$sagepay->setMode( $mode );
 
 if (SagePay::is3dResponse()) {
   $sagepay = SagePay::recover3d();
@@ -21,7 +22,7 @@ elseif ($_POST) {
 
   /**
    * All the below fields are required for successful submission
-   * to Sagepay.
+   * to Opayo.
    **/
 
   // VendorTxCode must be unique per successful transaction. Its purpose
