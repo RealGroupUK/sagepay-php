@@ -337,7 +337,7 @@ $merchantkey = $sagepay->getMerchantKey();
                                 <div class="col-xs-12">
                                     <div class="form-group">
                                         <label for="invoiceValue">Invoice value (£)</label>
-                                        <input type="number" class="form-control" name="invoiceValue" required placeholder="eg. 1234.56" step="0.01" />
+                                        <input type="number" class="form-control" name="invoiceValue" required placeholder="eg. 1234.56" step="0.01" min=""0.01" />
                                         Price <em>including</em> VAT
                                     </div>
                                 </div>                        
