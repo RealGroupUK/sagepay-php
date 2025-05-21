@@ -216,8 +216,8 @@ $scaObj->challengeWindowSize = 'ExtraLarge';
     }
     $payment_options->billingAddress->postalCode = $postcode;
     $state = filter_input( INPUT_POST, 'payeeState' );
-    if ('' == $state) {
-        $payment_options->billingState = $state;
+    if ('' != $state) {
+        $payment_options->billingAddress->state = $state;
     }
     $payment_options->billingAddress->country = filter_input( INPUT_POST, 'payeeCountry' );
     $payment_options->entryMethod = 'Ecommerce';
