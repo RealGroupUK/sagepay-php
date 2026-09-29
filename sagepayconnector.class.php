@@ -94,7 +94,7 @@ class SagePayConnector {
      * @param string $paRes This is a Base64 encoded, encrypted message sent
      * back by the issuing bank to your TermURL at the end of the 3D Secure
      * authentication process
-     * @return string JSON {"status": "authenticated"} on success
+     * @return object JSON {"status": "authenticated"} on success
      */
     public function get3DAuth( $transactionID, $paRes )
     {
@@ -107,6 +107,7 @@ class SagePayConnector {
      * Get the 3D secure CHALLENGE response from the provider
      * @param string $transactionID The ID of the transaction being authorised
      * @param string $cres Challenge result - this is the authentication result.
+     * @return object PHP object of Opayo JSON response
      */
     public function get3DAuthCallback( $transactionID, $cres )
     {
@@ -121,28 +122,31 @@ class SagePayConnector {
      * Send a request to SagePay using curl
      * @param string $endpoint The URL endpoint for the request
      * @param string $data JSON structured data
-     * @return string JSON response
+     * @return object PHP object of Opayo JSON response
      */
     private function sageRequest( $endpoint, $data )
     {
         $curl = curl_init();
 
-        curl_setopt_array($curl, array(
+        curl_setopt_array($curl, [
             CURLOPT_URL => $endpoint,
             CURLOPT_RETURNTRANSFER => true,
             CURLOPT_CUSTOMREQUEST => "POST",
             CURLOPT_POSTFIELDS => $data,
-            CURLOPT_HTTPHEADER => array(
-            "Authorization: Basic {$this->sessionkey}",
-            "Cache-Control: no-cache",
-            "Content-Type: application/json"
-         ),
-        ));
+            CURLOPT_FORBID_REUSE => TRUE,
+            CURLOPT_HTTPHEADER => [
+                "Authorization: Basic {$this->sessionkey}",
+                "Cache-Control: no-cache",
+                "Content-Type: application/json"
+            ],
+        ]);
         
        $response = curl_exec($curl);
-       $err = curl_error($curl);
 
-       curl_close($curl);
+       if (false === $response) {
+          throw new Exception('Curl request failed: ' . curl_error($curl));
+       }
+
        $return = json_decode( $response );
        $return->http_response = curl_getinfo($curl, CURLINFO_HTTP_CODE);
 

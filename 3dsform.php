@@ -13,6 +13,10 @@ ini_set('session.use_only_cookies', 1);
 ini_set('session.cookie_secure', 1);
 
 session_start();
+if ( !array_key_exists( 'cxID', $_SESSION )) {
+    die (); // Quiet die to prevent any data being provided.
+}
+
 $fh = fopen('paymentkey.' . $_SESSION['cxID'] . '.dat', 'r');
 
 if ($fh) {

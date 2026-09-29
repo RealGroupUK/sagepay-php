@@ -60,6 +60,7 @@ define('ACTION_FAILED', 255);
 
 /**
  * Write the 3DS session data to a text file for processing in an iFrame
+ * @param string $action 
  * @param string $url
  * @param string $creq
  * @param string $session
@@ -110,7 +111,9 @@ function failedTransaction()
     echo '<div class="error danger">';
     echo '<h3>There was a problem with your payment</h3>';
     foreach ($errors as $error) {
-        echo "<p>$error->description</p>";
+        if (property_exists($error, 'description')) {
+            echo "<p>$error->description</p>";
+        }
     }
     if (isset($txfail)) {
         echo "<p>$txfail->description</p>";
